@@ -7,7 +7,12 @@ from slack_sdk.web.async_client import AsyncWebClient
 from ..worker.tasks import run_langgraph_pipeline
 
 # 메시지 파싱 패턴: skill[스킬명] 또는 skill[스킬명:CLI] 프롬프트
-SKILL_PATTERN = re.compile(r"^skill\s*\[(.*?)\]\s*(.*)$", re.IGNORECASE | re.DOTALL)
+# 채널에서 봇 멘션(@bot) 후 명령어를 입력하면 텍스트 앞에 <@USER_ID> 가 붙으므로
+# 선택적으로 허용 (DM이나 멘션 없는 채널 메시지도 모두 처리)
+SKILL_PATTERN = re.compile(
+    r"^(?:<@[A-Z0-9]+>\s*)?skill\s*\[(.*?)\]\s*(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 # 스킬명 허용 문자 (경로 순회 방지)
 VALID_SKILL_NAME = re.compile(r'^[a-zA-Z0-9_-]+$')
