@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 from typing import AsyncGenerator
 from .base import BaseCLIAdapter, JobSpec
 
@@ -17,8 +18,8 @@ class ClaudeCLIAdapter(BaseCLIAdapter):
         # 실행 인자 설정 (예: claude --print "프롬프트")
         cmd = ["claude", "--print", spec.prompt]
         
-        # 워크스페이스 타겟 경로 확인
-        cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else "/app/workspace"
+        # 워크스페이스 경로 확인 (없으면 홈 디렉토리로 폴백 - Windows/Linux 모두 안전)
+        cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
 
         self.process = await asyncio.create_subprocess_exec(
             *cmd,

@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 from typing import AsyncGenerator
 from .base import BaseCLIAdapter, JobSpec
 
@@ -14,7 +15,7 @@ class CursorCLIAdapter(BaseCLIAdapter):
     async def submit(self, spec: JobSpec) -> str:
         # Cursor CLI 구동: 사용자가 별도 지시한 'agent' 바이너리명 사용
         cmd = ["agent", spec.prompt]
-        cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else "/app/workspace"
+        cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
 
         self.process = await asyncio.create_subprocess_exec(
             *cmd,

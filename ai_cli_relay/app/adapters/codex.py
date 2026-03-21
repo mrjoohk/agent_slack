@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 from typing import AsyncGenerator
 from .base import BaseCLIAdapter, JobSpec
 
@@ -12,7 +13,7 @@ class CodexCLIAdapter(BaseCLIAdapter):
 
     async def submit(self, spec: JobSpec) -> str:
         cmd = ["codex", spec.prompt]
-        cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else "/app/workspace"
+        cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
 
         self.process = await asyncio.create_subprocess_exec(
             *cmd,

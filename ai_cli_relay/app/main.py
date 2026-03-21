@@ -1,10 +1,18 @@
+import sys
 import os
+import asyncio
+
+# Windows: asyncio subprocess 사용을 위해 ProactorEventLoop 명시 설정
+# (Python 3.8+ 기본값이나, 명시적으로 선언해 subprocess 호환성 보장)
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI, Request
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from .bot.commands import register_listeners
 
-app = FastAPI(title="AI CLI Orchestrator (MVP)")
+app = FastAPI(title="AI CLI Orchestrator")
 
 # Slack Bolt App Init
 slack_app = AsyncApp(

@@ -9,8 +9,11 @@ pydantic==2.6.4
 slack_bolt==1.18.1
 
 # Task Queue & Async
-celery==5.3.6
-redis==5.0.3
+# [선택] Celery + Redis: 멀티 서버 분산 처리가 필요한 경우에만 사용
+# Windows에서는 --pool=eventlet 또는 --pool=solo 필수 (prefork 미지원)
+# 현재 구현은 asyncio.create_task() 기반으로 Celery 없이 동작
+# celery==5.3.6
+# redis==5.0.3
 
 # Docker SDK for Sandbox Execution
 docker==7.0.0
@@ -18,3 +21,6 @@ docker==7.0.0
 # Orchestration Engine
 langchain==0.1.13
 langgraph==0.0.30
+
+# Excel utility
+openpyxl==3.1.2
