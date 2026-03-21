@@ -22,15 +22,25 @@ All agents working in this repo must follow the rules below.
 
 ```
 Slack message (phone / desktop)
+  skill[core:claude,gemini] do something
   → Slack cloud servers
     → WebSocket (outbound from PC — no port forwarding needed)
       → main.py  AsyncSocketModeHandler
-        → commands.py  (pattern match, input validation, uuid job_id)
-          → asyncio.create_task()
+        → commands.py  (_parse_skill_spec → skill_name + cli_targets list)
+          → asyncio.create_task()  ×N  (one per CLI, run in parallel)
             → tasks.py  (SkillLoader → CLI Adapter → SlackThrottler)
-              → subprocess  (claude / cursor / gemini / codex CLI)
-                → SlackThrottler → chat.update / chat.postMessage → Slack thread
+              → subprocess  (claude / gemini / codex / cursor)
+                → SlackThrottler → each CLI streams to its own thread reply
 ```
+
+**Slack command format:**
+
+| 입력 | 동작 |
+|------|------|
+| `skill[core] prompt` | DEFAULT_CLI 단일 실행 |
+| `skill[core:claude] prompt` | Claude 단일 실행 |
+| `skill[core:claude,gemini] prompt` | Claude + Gemini 병렬 실행 |
+| `skill[core:all] prompt` | 전체 4개 CLI 병렬 실행 |
 
 **Key design decisions already made — do not revert without justification:**
 
@@ -86,9 +96,9 @@ Slack message (phone / desktop)
   All four adapters (`claude`, `cursor`, `gemini`, `codex`) must implement it.
   Adding a new adapter means subclassing `BaseCLIAdapter`, registering it in
   the `_get_adapter()` factory in `tasks.py`, and nothing else.
-- `SlackThrottler` owns the Slack update/post logic. Do not call
-  `slack_client.chat_update` or `chat_postMessage` directly from adapters or
-  `commands.py`.
+- `SlackThrottler` owns the streaming update/post logic (inside `tasks.py`).
+  `commands.py` may call `client.chat_postMessage` directly only for ack/status
+  messages (not for streaming CLI output). Adapters must never call Slack APIs.
 - Skill files live at `$SKILL_BASE_PATH/<skill_name>/SKILL.md`.
   Never hardcode a user-specific path (e.g. `c:\Users\user\...`) in source code.
 - The `workspace_path` fallback for subprocess `cwd` must be `Path.home()`,
@@ -106,7 +116,8 @@ and document it here and in `tasks.py`'s docstring.
 |----------|---------|---------|
 | `SLACK_BOT_TOKEN` | *(required)* | Slack bot OAuth token (`xoxb-...`) |
 | `SLACK_APP_TOKEN` | *(required)* | App-Level Token for Socket Mode (`xapp-...`) |
-| `SELECTED_CLI` | `claude` | CLI adapter to use: `claude\|cursor\|gemini\|codex` |
+| `DEFAULT_CLI` | `claude` | `skill[name]` 처럼 CLI 미지정 시 사용할 기본 CLI |
+| `SELECTED_CLI` | — | `DEFAULT_CLI` 의 구버전 별칭 (하위 호환, 병행 지원) |
 | `SKILL_BASE_PATH` | `~/.gemini/antigravity/skills` | Root directory for skill YAML/MD files |
 | `WORKSPACE_PATH` | `~/workspace` | Working directory passed to the CLI subprocess |
 | `JOB_TIMEOUT` | `300` | Seconds before the subprocess is forcibly cancelled |
