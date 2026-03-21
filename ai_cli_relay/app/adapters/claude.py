@@ -15,8 +15,10 @@ class ClaudeCLIAdapter(BaseCLIAdapter):
         """
         claude CLI를 서브프로세스로 실행
         """
-        # 실행 인자 설정 (예: claude --print "프롬프트")
-        cmd = ["claude", "--print", spec.prompt]
+        # --print: 비대화식 출력 후 종료
+        # --dangerously-skip-permissions: 서버 무인 실행 시 권한 확인 프롬프트 생략
+        #   (개인 서버에서 자동 실행 목적으로만 사용할 것)
+        cmd = ["claude", "--print", "--dangerously-skip-permissions", spec.prompt]
         
         # 워크스페이스 경로 확인 (없으면 홈 디렉토리로 폴백 - Windows/Linux 모두 안전)
         cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
