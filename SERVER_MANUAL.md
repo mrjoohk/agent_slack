@@ -9,14 +9,15 @@
 ## 목차
 
 1. [최초 1회 설정](#1-최초-1회-설정)
-2. [서버 수동 실행](#2-서버-수동-실행)
-3. [Windows 부팅 시 자동 시작 설정](#3-windows-부팅-시-자동-시작-설정)
-4. [Claude CLI 인증 확인 및 갱신](#4-claude-cli-인증-확인-및-갱신)
-5. [서버 상태 확인 및 재시작](#5-서버-상태-확인-및-재시작)
-6. [스킬 추가 및 관리](#6-스킬-추가-및-관리)
-7. [로그 확인](#7-로그-확인)
-8. [업데이트 절차](#8-업데이트-절차)
-9. [문제 해결 체크리스트](#9-문제-해결-체크리스트)
+2. [CLI별 설치 및 인증](#2-cli별-설치-및-인증)
+3. [서버 수동 실행](#3-서버-수동-실행)
+4. [Windows 부팅 시 자동 시작 설정](#4-windows-부팅-시-자동-시작-설정)
+5. [CLI 인증 확인 및 갱신](#5-cli-인증-확인-및-갱신)
+6. [서버 상태 확인 및 재시작](#6-서버-상태-확인-및-재시작)
+7. [스킬 추가 및 관리](#7-스킬-추가-및-관리)
+8. [로그 확인](#8-로그-확인)
+9. [업데이트 절차](#9-업데이트-절차)
+10. [문제 해결 체크리스트](#10-문제-해결-체크리스트)
 
 ---
 
@@ -106,10 +107,18 @@ mkdir "C:\Users\user\workspace"
 ```env
 SLACK_BOT_TOKEN=xoxb-여기에-봇토큰-붙여넣기
 SLACK_APP_TOKEN=xapp-1-여기에-앱레벨토큰-붙여넣기
+
+# 사용할 CLI 선택: claude | gemini | codex | cursor
 SELECTED_CLI=claude
+
 SKILL_BASE_PATH=C:\Users\user\.gemini\antigravity\skills
 WORKSPACE_PATH=C:\Users\user\workspace
 JOB_TIMEOUT=300
+
+# CLI별 API Key (사용하는 CLI에 맞게 추가)
+# GEMINI_API_KEY=AIzaSy...         # Gemini 사용 시 (없으면 브라우저 인증)
+# OPENAI_API_KEY=sk-...            # Codex 사용 시 (필수)
+# CURSOR_AGENT_BIN=cursor          # Cursor 바이너리 경로 (기본값: cursor)
 ```
 
 > Slack 토큰 발급 방법은 SETUP_MANUAL.md 4단계를 참고하세요.
@@ -157,11 +166,148 @@ python -m ai_cli_relay.app.main
 
 ---
 
-## 2. 서버 수동 실행
+---
+
+## 2. CLI별 설치 및 인증
+
+> 사용할 CLI 하나만 설치하면 됩니다. `SELECTED_CLI` 환경변수로 선택합니다.
+
+---
+
+### 2-A. Claude Code CLI (기본값, `SELECTED_CLI=claude`)
+
+```powershell
+# 설치
+npm install -g @anthropic-ai/claude-code
+
+# 인증 — 최초 1회 대화형으로 진행 (브라우저 Anthropic 계정 로그인)
+claude
+# 로그인 완료 후 Ctrl+C
+
+# 서버 모드 동작 확인
+claude --print --dangerously-skip-permissions "hello"
+# 응답 텍스트가 출력되면 정상
+```
+
+**서버 모드 플래그**: `--print --dangerously-skip-permissions`
+- `--print`: 비대화식 출력 후 종료
+- `--dangerously-skip-permissions`: 파일 읽기·쓰기·명령 실행 권한 확인 생략
+
+**인증 정보 저장 위치**: `%APPDATA%\Claude\` (Windows)
+인증 만료 시 서버를 중단하고 `claude` 재실행 후 브라우저 로그인.
+
+---
+
+### 2-B. Gemini CLI (`SELECTED_CLI=gemini`)
+
+```powershell
+# 설치
+npm install -g @google/gemini-cli
+
+# 인증 방법 1 — 브라우저 Google 계정 로그인 (최초 1회)
+gemini
+# 브라우저가 열리면 Google 계정으로 로그인 후 터미널로 복귀
+
+# 인증 방법 2 — API Key (서버 환경 권장)
+# Google AI Studio(https://aistudio.google.com)에서 API Key 발급 후 .env에 추가:
+# GEMINI_API_KEY=AIzaSy...
+```
+
+`.env`에 추가:
+```env
+SELECTED_CLI=gemini
+GEMINI_API_KEY=AIzaSy...   # API Key 인증 사용 시
+```
+
+**서버 모드 동작 확인**:
+```powershell
+gemini --yolo "hello"
+# 응답 텍스트가 출력되면 정상
+```
+
+**서버 모드 플래그**: `--yolo`
+- 모든 도구 실행 및 파일 변경을 자동 승인
+
+---
+
+### 2-C. OpenAI Codex CLI (`SELECTED_CLI=codex`)
+
+```powershell
+# 설치
+npm install -g @openai/codex
+
+# 인증 — API Key 방식 (대화형 로그인 없음)
+# OpenAI Platform(https://platform.openai.com/api-keys)에서 API Key 발급
+```
+
+`.env`에 추가:
+```env
+SELECTED_CLI=codex
+OPENAI_API_KEY=sk-...
+```
+
+**서버 모드 동작 확인**:
+```powershell
+codex --approval-mode full-auto "hello"
+# 응답 텍스트가 출력되면 정상
+```
+
+**서버 모드 플래그**: `--approval-mode full-auto`
+- 모든 파일 변경 및 명령 실행을 자동 승인
+
+---
+
+### 2-D. Cursor Agent CLI (`SELECTED_CLI=cursor`)
+
+```powershell
+# Cursor IDE 설치 (https://www.cursor.com/downloads)
+# 설치 후 PATH에 cursor 바이너리가 등록되어 있는지 확인
+cursor --version
+```
+
+**바이너리 경로 확인**:
+Cursor 버전 및 설치 방식에 따라 바이너리 경로가 다릅니다.
+경로를 직접 확인해서 `.env`에 명시하는 것을 권장합니다.
+
+```powershell
+# 바이너리 위치 탐색
+where cursor
+# 또는
+Get-Command cursor | Select-Object Source
+```
+
+`.env`에 추가:
+```env
+SELECTED_CLI=cursor
+CURSOR_AGENT_BIN=cursor          # 기본값. 경로가 다르면 전체 경로 입력
+                                  # 예: C:\Users\user\AppData\Local\Programs\cursor\cursor.exe
+```
+
+**인증**: Cursor IDE에 로그인한 상태여야 CLI도 인증됩니다.
+Cursor IDE를 열어서 계정 로그인 확인 후 사용하세요.
+
+> ⚠️ **주의**: Cursor의 CLI agent 기능은 버전에 따라 플래그·동작이 다를 수 있습니다.
+> 실제 실행 전 `cursor agent --help`로 지원 플래그를 확인하세요.
+> 문제가 있으면 `CURSOR_AGENT_BIN` 환경변수로 정확한 바이너리 경로를 지정합니다.
+
+---
+
+### CLI별 비교 요약
+
+| CLI | 설치 패키지 | 인증 방식 | 서버 모드 플래그 | 추가 env var |
+|-----|-----------|---------|--------------|------------|
+| Claude | `@anthropic-ai/claude-code` | 브라우저 1회 로그인 | `--print --dangerously-skip-permissions` | 없음 |
+| Gemini | `@google/gemini-cli` | 브라우저 or API Key | `--yolo` | `GEMINI_API_KEY` (선택) |
+| Codex | `@openai/codex` | API Key | `--approval-mode full-auto` | `OPENAI_API_KEY` (필수) |
+| Cursor | Cursor IDE 설치 | IDE 로그인 | `agent --no-confirm` | `CURSOR_AGENT_BIN` (선택) |
+
+---
+
+## 3. 서버 수동 실행
 
 매번 서버를 시작할 때 사용하는 명령어 모음입니다.
 
-### start_server.bat 스크립트 생성 (권장)
+### 3-1. start_server.bat 스크립트 생성 (권장)
 
 반복 입력을 줄이기 위해 배치 파일을 하나 만들어 두면 편리합니다.
 
@@ -190,7 +336,7 @@ pause
 
 ---
 
-## 3. Windows 부팅 시 자동 시작 설정
+## 4. Windows 부팅 시 자동 시작 설정
 
 PC를 재시작해도 서버가 자동으로 켜지게 합니다.
 
@@ -235,16 +381,26 @@ Start-ScheduledTask -TaskName "AI CLI Slack Bot"
 
 ---
 
-## 4. Claude CLI 인증 확인 및 갱신
+## 5. CLI 인증 확인 및 갱신
 
 Claude CLI 인증은 세션 기반으로, 장기간 미사용 시 만료될 수 있습니다.
 
 ### 인증 상태 확인
 
+사용 중인 CLI에 맞는 명령어로 확인합니다.
+
 ```powershell
-claude --print "ping"
+# Claude
+claude --print --dangerously-skip-permissions "ping"
+
+# Gemini
+gemini --yolo "ping"
+
+# Codex (OPENAI_API_KEY가 환경변수에 있어야 함)
+codex --approval-mode full-auto "ping"
+
 # 정상: 응답 텍스트 출력
-# 만료: 로그인 안내 메시지 또는 오류
+# 인증 문제: 로그인 안내 메시지 또는 즉시 오류 종료
 ```
 
 ### 인증 만료 시 갱신
@@ -252,12 +408,20 @@ claude --print "ping"
 서버를 일시 중단하고 대화형으로 재인증합니다.
 
 ```powershell
-# 서버 종료 (작업 스케줄러로 실행 중인 경우)
+# 서버 종료
 Stop-ScheduledTask -TaskName "AI CLI Slack Bot"
 
-# 재인증 (브라우저 로그인)
+# CLI별 재인증
+# Claude: 브라우저 로그인
 claude
-# 로그인 완료 후 Ctrl+C로 종료
+
+# Gemini: 브라우저 로그인
+gemini
+# (또는 .env의 GEMINI_API_KEY 갱신)
+
+# Codex: .env의 OPENAI_API_KEY 갱신 (API Key는 만료 없음, 단 취소 시 교체 필요)
+
+# Cursor: Cursor IDE 열어서 재로그인
 
 # 서버 재시작
 Start-ScheduledTask -TaskName "AI CLI Slack Bot"
@@ -268,7 +432,7 @@ Start-ScheduledTask -TaskName "AI CLI Slack Bot"
 
 ---
 
-## 5. 서버 상태 확인 및 재시작
+## 6. 서버 상태 확인 및 재시작
 
 ### 실행 중인 프로세스 확인
 
@@ -296,7 +460,7 @@ Start-ScheduledTask -TaskName "AI CLI Slack Bot"
 
 ---
 
-## 6. 스킬 추가 및 관리
+## 7. 스킬 추가 및 관리
 
 ### 새 스킬 추가
 
@@ -332,7 +496,7 @@ Get-ChildItem "C:\Users\user\.gemini\antigravity\skills" -Directory | Select-Obj
 
 ---
 
-## 7. 로그 확인
+## 8. 로그 확인
 
 현재 서버는 콘솔 출력(`print`)으로 로그를 남깁니다.
 
@@ -369,7 +533,7 @@ Get-Content logs\server.log -Tail 50 -Wait
 
 ---
 
-## 8. 업데이트 절차
+## 9. 업데이트 절차
 
 코드가 GitHub에 새로 올라왔을 때 서버를 업데이트합니다.
 
@@ -393,17 +557,20 @@ Start-ScheduledTask -TaskName "AI CLI Slack Bot"
 
 ---
 
-## 9. 문제 해결 체크리스트
+## 10. 문제 해결 체크리스트
 
 | 증상 | 원인 | 해결 방법 |
 |------|------|----------|
 | Slack 봇 응답 없음 | 서버 미실행 | `Get-Process python` 확인, 서버 재시작 |
 | Slack 봇 응답 없음 | Socket Mode 연결 끊김 | 서버 재시작, `SLACK_APP_TOKEN` 확인 |
-| `❌ 오류 발생` 반복 | Claude CLI 인증 만료 | 4단계 인증 갱신 절차 실행 |
-| `❌ 오류 발생` + PID 없음 | `claude` 명령어 못 찾음 | `claude --version` 확인, npm 재설치 |
-| `FileNotFoundError: Skill 'xxx'` | 스킬 파일 없음 | 6단계 스킬 생성 절차 확인 |
+| `❌ 오류 발생` 반복 (Claude) | Claude CLI 인증 만료 | `claude` 재실행 → 브라우저 로그인 |
+| `❌ 오류 발생` 반복 (Gemini) | Gemini 인증 만료 or API Key 없음 | `gemini` 재실행 or `.env`의 `GEMINI_API_KEY` 확인 |
+| `❌ 오류 발생` 반복 (Codex) | `OPENAI_API_KEY` 미설정 or 잘못됨 | `.env`의 `OPENAI_API_KEY` 확인 |
+| `❌ 오류 발생` 반복 (Cursor) | Cursor 바이너리 경로 오류 | `where cursor` 확인 후 `CURSOR_AGENT_BIN` 설정 |
+| `❌ 오류 발생` + PID 없음 | CLI 명령어를 찾을 수 없음 | `claude --version` 등으로 설치 확인, npm 재설치 |
+| `FileNotFoundError: Skill 'xxx'` | 스킬 파일 없음 | 7단계 스킬 생성 절차 확인 |
 | 요청 후 5분간 무응답 | 타임아웃 (`JOB_TIMEOUT=300`) | `.env`에서 `JOB_TIMEOUT` 값 늘리기 |
-| PC 재시작 후 봇 미동작 | 자동 시작 미설정 | 3단계 자동 시작 설정 확인 |
+| PC 재시작 후 봇 미동작 | 자동 시작 미설정 | 4단계 자동 시작 설정 확인 |
 | `.env` 환경변수 미적용 | 로드 명령어 미실행 | `start_server.bat` 사용 확인 |
 
 ---

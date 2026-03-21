@@ -4,15 +4,23 @@ from pathlib import Path
 from typing import AsyncGenerator
 from .base import BaseCLIAdapter, JobSpec
 
+
 class CodexCLIAdapter(BaseCLIAdapter):
     """
-    OpenAI Codex CLI 툴 래핑 어댑터
+    OpenAI Codex CLI (@openai/codex) 서브프로세스 래퍼.
+
+    설치:  npm install -g @openai/codex
+    인증:  OPENAI_API_KEY 환경변수 설정 (대화형 로그인 없음)
+           .env 파일에 OPENAI_API_KEY=sk-... 추가
     """
+
     def __init__(self):
         self.process = None
 
     async def submit(self, spec: JobSpec) -> str:
-        cmd = ["codex", spec.prompt]
+        # --approval-mode full-auto : 모든 파일 변경·명령 실행을 자동 승인 (서버 무인 실행 필수)
+        # OPENAI_API_KEY 환경변수가 없으면 즉시 오류로 종료됨
+        cmd = ["codex", "--approval-mode", "full-auto", spec.prompt]
         cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
 
         self.process = await asyncio.create_subprocess_exec(
@@ -28,13 +36,13 @@ class CodexCLIAdapter(BaseCLIAdapter):
         if not self.process or not self.process.stdout:
             yield "Process not found.\n"
             return
-            
+
         while True:
             line = await self.process.stdout.readline()
             if not line:
                 break
             yield line.decode('utf-8', errors='replace')
-            
+
         await self.process.wait()
 
     async def status(self, job_id: str) -> str:
