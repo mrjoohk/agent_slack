@@ -367,32 +367,58 @@ pause
 
 ---
 
-### Step 15. 이벤트 구독 설정
+### Step 15. 이벤트 구독 설정 ★ 이 단계를 빠뜨리면 봇이 메시지에 반응하지 않습니다
+
+> **왜 필요한가?**
+> Slack은 기본적으로 봇에게 메시지 이벤트를 전달하지 않습니다.
+> "이 이벤트를 내 봇에게 보내줘"라고 등록해야 비로소 메시지가 서버로 전달됩니다.
+> 이 설정이 없으면 서버는 켜져 있어도 Slack 메시지를 받지 못합니다.
 
 1. 왼쪽 메뉴 **Features** 섹션 → **Event Subscriptions** 클릭
-2. **Enable Events** 토글 → **ON**
-3. 페이지 아래 **Subscribe to bot events** 클릭
-4. **Add Bot User Event** 를 클릭해서 아래 4개 추가:
+2. 페이지 상단 **Enable Events** 토글 → **ON** (초록색)
 
-   | Event 이름 |
-   |-----------|
-   | `message.channels` |
-   | `message.groups` |
-   | `message.im` |
-   | `message.mpim` |
+   ```
+   Enable Events  [  ●  ]  ← 반드시 ON
+   ```
 
-5. 오른쪽 아래 **Save Changes** 클릭
+   > Socket Mode를 사용하기 때문에 아래 **Request URL** 칸은 **비워두세요**.
+   > URL 입력 없이도 WebSocket으로 이벤트가 전달됩니다.
 
-   > Socket Mode에서는 **Request URL 입력 불필요** — URL 칸은 비워두세요.
+3. 페이지 아래로 스크롤 → **Subscribe to bot events** 섹션 찾기
+4. **Add Bot User Event** 버튼 클릭 후 아래 4개를 하나씩 검색해서 추가:
+
+   | Event 이름 | 용도 |
+   |-----------|------|
+   | `message.channels` | 봇이 초대된 **공개 채널** 메시지 수신 |
+   | `message.groups` | 봇이 초대된 **비공개 채널** 메시지 수신 |
+   | `message.im` | 봇과의 **1:1 DM** 메시지 수신 |
+   | `message.mpim` | **그룹 DM** 메시지 수신 |
+
+   추가 후 이렇게 보여야 합니다:
+   ```
+   Subscribe to bot events
+   ✅ message.channels
+   ✅ message.groups
+   ✅ message.im
+   ✅ message.mpim
+   ```
+
+5. 페이지 오른쪽 아래 **Save Changes** 클릭
+
+   > ⚠️ Save Changes를 누르지 않으면 설정이 저장되지 않습니다.
 
 ---
 
-### Step 16. 앱 재설치 (권한 변경 반영)
+### Step 16. 앱 재설치 ★ 반드시 진행
 
-이벤트 권한을 추가했으므로 앱을 다시 설치해야 합니다.
+이벤트 구독을 추가하면 **앱을 다시 설치해야 변경사항이 반영**됩니다.
+재설치를 건너뛰면 이벤트가 전달되지 않습니다.
 
 1. 왼쪽 메뉴 **Settings** → **Install App** 클릭
-2. **Reinstall to Workspace** 클릭 → **허용**
+2. **Reinstall to Workspace** 버튼 클릭
+3. 권한 요청 화면에서 **허용** 클릭
+
+   > 재설치 후 `SLACK_BOT_TOKEN`은 변경되지 않습니다. `.env`는 그대로 유지합니다.
 
 ---
 
