@@ -36,20 +36,6 @@ async def run_langgraph_pipeline(
     cli_name: str = None,
     timeout: int = None,
 ):
-    """
-    AI CLI를 실행하고 stdout을 실시간으로 Slack 스레드에 스트리밍합니다.
-
-    Parameters:
-        cli_name     - 사용할 CLI ('claude'|'gemini'|'codex'|'cursor').
-                       None이면 DEFAULT_CLI → SELECTED_CLI → 'claude' 순으로 폴백.
-
-    환경변수:
-        SKILL_BASE_PATH  - 스킬 디렉토리 경로 (기본: ~/.gemini/antigravity/skills)
-        WORKSPACE_PATH   - CLI 실행 작업 디렉토리 (기본: ~/workspace)
-        DEFAULT_CLI      - cli_name 미지정 시 사용할 CLI (기본: claude)
-        SELECTED_CLI     - DEFAULT_CLI 의 구버전 별칭 (하위 호환)
-        JOB_TIMEOUT      - 작업 타임아웃(초) (기본: 300)
-    """
     selected_cli = (
         cli_name
         or os.environ.get("DEFAULT_CLI")
@@ -63,18 +49,25 @@ async def run_langgraph_pipeline(
     )
     workspace = os.environ.get("WORKSPACE_PATH", str(Path.home() / "workspace"))
 
-    print(f"[{job_id}] started | skill={skill_name} | cli={selected_cli}")
+    print(f"[{job_id[:8]}] PIPELINE START | skill={skill_name} cli={selected_cli} "
+          f"timeout={timeout}", flush=True)
+    print(f"[{job_id[:8]}] SKILL_BASE_PATH={base_dir}", flush=True)
+    print(f"[{job_id[:8]}] WORKSPACE_PATH={workspace}", flush=True)
 
-    # 1. Skill Context 로드
+    # 1. Skill 로드
+    print(f"[{job_id[:8]}] step1: loading skill...", flush=True)
     loader = SkillLoader(base_dir=base_dir)
     try:
         skill_prompt = loader.load_skill_prompt(skill_name)
+        print(f"[{job_id[:8]}] step1: skill loaded ({len(skill_prompt)} chars)", flush=True)
     except Exception as e:
-        print(f"[{job_id}] Skill loading error: {e}")
+        print(f"[{job_id[:8]}] step1: skill load FAILED: {e}", flush=True)
         skill_prompt = "Default Context"
 
-    # 2. CLI Adapter 선택
+    # 2. Adapter 선택
+    print(f"[{job_id[:8]}] step2: getting adapter for {selected_cli!r}", flush=True)
     adapter = _get_adapter(selected_cli)
+    print(f"[{job_id[:8]}] step2: adapter={adapter.__class__.__name__}", flush=True)
 
     spec = JobSpec(
         job_id=job_id,
@@ -85,9 +78,11 @@ async def run_langgraph_pipeline(
 
     # 3. SlackThrottler 초기화
     async def _update(ts: str, text: str) -> None:
+        print(f"[{job_id[:8]}] throttler: update ts={ts[:10]}", flush=True)
         await slack_client.chat_update(channel=channel, ts=ts, text=text)
 
     async def _post_and_get_ts(text: str) -> str:
+        print(f"[{job_id[:8]}] throttler: postMessage (overflow)", flush=True)
         resp = await slack_client.chat_postMessage(
             channel=channel,
             thread_ts=slack_thread_ts,
@@ -103,29 +98,42 @@ async def run_langgraph_pipeline(
 
     try:
         # 4. 서브프로세스 기동
+        print(f"[{job_id[:8]}] step4: submitting to adapter...", flush=True)
         pid = await adapter.submit(spec)
-        print(f"[{job_id}] spawned PID={pid}")
+        print(f"[{job_id[:8]}] step4: spawned PID={pid}", flush=True)
 
-        # 5. stdout 스트리밍 → SlackThrottler → Slack
+        # 5. stdout 스트리밍
+        line_count = 0
         async def _stream_and_ingest():
+            nonlocal line_count
+            print(f"[{job_id[:8]}] step5: stream started", flush=True)
             async for line in adapter.stream(job_id):
                 clean = ANSI_ESCAPE.sub('', line)
                 if clean.strip():
+                    line_count += 1
+                    if line_count <= 3:
+                        print(f"[{job_id[:8]}] step5: line#{line_count}: {clean[:60]!r}",
+                              flush=True)
                     await throttler.ingest_log(clean)
+            print(f"[{job_id[:8]}] step5: stream ended (total {line_count} lines)", flush=True)
 
         await asyncio.wait_for(_stream_and_ingest(), timeout=timeout)
 
     except asyncio.TimeoutError:
         await adapter.cancel(job_id)
         await throttler.ingest_log(
-            f"\n⚠️ [{selected_cli.upper()}] 작업 시간 초과 ({timeout}초). 프로세스가 중단되었습니다."
+            f"\n⚠️ [{selected_cli.upper()}] 작업 시간 초과 ({timeout}초). "
+            f"프로세스가 중단되었습니다."
         )
-        print(f"[{job_id}] timeout after {timeout}s")
+        print(f"[{job_id[:8]}] TIMEOUT after {timeout}s", flush=True)
 
     except Exception as e:
+        import traceback
+        print(f"[{job_id[:8]}] EXCEPTION: {e}", flush=True)
+        traceback.print_exc()
         await throttler.ingest_log(f"\n❌ [{selected_cli.upper()}] 오류 발생: {e}")
-        print(f"[{job_id}] error: {e}")
 
     finally:
+        print(f"[{job_id[:8]}] step6: closing throttler...", flush=True)
         await throttler.close()
-        print(f"[{job_id}] finished | cli={selected_cli}")
+        print(f"[{job_id[:8]}] PIPELINE END | cli={selected_cli}", flush=True)
