@@ -1,17 +1,16 @@
 # ai_cli_relay dependencies
 
-# Core API
-fastapi==0.110.0
-uvicorn==0.28.0
+# Core
+fastapi==0.110.0      # 현재는 미사용 (Socket Mode로 전환). 향후 REST API 확장 시 재활성화
+uvicorn==0.28.0       # 위와 동일
 pydantic==2.6.4
 
-# Slack Integration
+# Slack Integration — Socket Mode (포트포워딩/ngrok 불필요)
 slack_bolt==1.18.1
+websockets==12.0      # AsyncSocketModeHandler 의존성
 
-# Task Queue & Async
-# [선택] Celery + Redis: 멀티 서버 분산 처리가 필요한 경우에만 사용
-# Windows에서는 --pool=eventlet 또는 --pool=solo 필수 (prefork 미지원)
-# 현재 구현은 asyncio.create_task() 기반으로 Celery 없이 동작
+# Task Queue (현재 미사용 — asyncio.create_task() 기반으로 대체됨)
+# Celery + Redis는 멀티 서버 분산 처리가 필요한 경우에만 활성화
 # celery==5.3.6
 # redis==5.0.3
 

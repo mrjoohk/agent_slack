@@ -3,32 +3,33 @@ import os
 import asyncio
 
 # Windows: asyncio subprocess 사용을 위해 ProactorEventLoop 명시 설정
-# (Python 3.8+ 기본값이나, 명시적으로 선언해 subprocess 호환성 보장)
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI, Request
 from slack_bolt.async_app import AsyncApp
-from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from .bot.commands import register_listeners
 
-app = FastAPI(title="AI CLI Orchestrator")
 
-# Slack Bolt App Init
-slack_app = AsyncApp(
-    token=os.environ.get("SLACK_BOT_TOKEN", "xoxb-dummy"),
-    signing_secret=os.environ.get("SLACK_SIGNING_SECRET", "dummy")
-)
-app_handler = AsyncSlackRequestHandler(slack_app)
+def create_slack_app() -> AsyncApp:
+    """
+    Socket Mode 용 AsyncApp 생성.
+    HTTP 웹훅 방식과 달리 signing_secret 불필요 — 인증은 WebSocket 연결 시 처리.
+    """
+    app = AsyncApp(token=os.environ.get("SLACK_BOT_TOKEN"))
+    register_listeners(app)
+    return app
 
-# 커스텀 리스너 (대화형 커맨드 패턴) 등록
-register_listeners(slack_app)
 
-@app.post("/slack/events")
-async def slack_events(req: Request):
-    """Slack Socket Mode 대신 HTTP Endpoint로 Event API 처리 시 진입점"""
-    return await app_handler.handle(req)
+async def main():
+    app = create_slack_app()
+    handler = AsyncSocketModeHandler(
+        app=app,
+        app_token=os.environ.get("SLACK_APP_TOKEN"),  # xapp-... (App-Level Token)
+    )
+    print("[AI CLI Bot] Socket Mode 시작 — 포트포워딩 불필요, Slack 서버로 아웃바운드 연결")
+    await handler.start_async()
 
-@app.get("/health")
-def healthcheck():
-    return {"status": "ok"}
+
+if __name__ == "__main__":
+    asyncio.run(main())

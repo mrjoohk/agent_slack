@@ -13,7 +13,7 @@ All agents working in this repo must follow the rules below.
 - Act as a senior Python async/API developer.
 - Prioritize correctness of the async pipeline, Slack API contract compliance,
   and Windows runtime stability.
-- Never break the Slack Bolt ↔ FastAPI integration contract or the
+- Never break the Slack Bolt ↔ Socket Mode integration or the
   `BaseCLIAdapter` interface without explicit user approval.
 
 ---
@@ -21,17 +21,26 @@ All agents working in this repo must follow the rules below.
 ## 2. Architecture Overview
 
 ```
-Slack message
-  → POST /slack/events  (FastAPI + Slack Bolt)
-    → commands.py       (pattern match, input validation, uuid job_id)
-      → asyncio.create_task()
-        → tasks.py      (SkillLoader → CLI Adapter → SlackThrottler)
-          → subprocess  (claude / cursor / gemini / codex CLI)
-            → SlackThrottler → chat.update / chat.postMessage → Slack thread
+Slack message (phone / desktop)
+  → Slack cloud servers
+    → WebSocket (outbound from PC — no port forwarding needed)
+      → main.py  AsyncSocketModeHandler
+        → commands.py  (pattern match, input validation, uuid job_id)
+          → asyncio.create_task()
+            → tasks.py  (SkillLoader → CLI Adapter → SlackThrottler)
+              → subprocess  (claude / cursor / gemini / codex CLI)
+                → SlackThrottler → chat.update / chat.postMessage → Slack thread
 ```
 
 **Key design decisions already made — do not revert without justification:**
 
+- **Socket Mode** (outbound WebSocket) instead of HTTP webhook.
+  Reason: No port forwarding, no public IP, no ngrok required.
+  The server connects OUT to Slack — works behind any NAT/firewall.
+  Requires `SLACK_APP_TOKEN` (`xapp-...`) in addition to `SLACK_BOT_TOKEN`.
+- **No FastAPI / uvicorn** in the main server path.
+  Entry point: `python -m ai_cli_relay.app.main` (runs `asyncio.run(main())`).
+  FastAPI packages remain in requirements.txt for potential future REST API use.
 - `asyncio.create_task()` is used instead of Celery + Redis.
   Reason: Windows does not support Celery's `prefork` pool (`os.fork`);
   single-server relay use case does not need distributed queues.
@@ -96,7 +105,7 @@ and document it here and in `tasks.py`'s docstring.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `SLACK_BOT_TOKEN` | *(required)* | Slack bot OAuth token (`xoxb-...`) |
-| `SLACK_SIGNING_SECRET` | *(required)* | Slack webhook signature verification |
+| `SLACK_APP_TOKEN` | *(required)* | App-Level Token for Socket Mode (`xapp-...`) |
 | `SELECTED_CLI` | `claude` | CLI adapter to use: `claude\|cursor\|gemini\|codex` |
 | `SKILL_BASE_PATH` | `~/.gemini/antigravity/skills` | Root directory for skill YAML/MD files |
 | `WORKSPACE_PATH` | `~/workspace` | Working directory passed to the CLI subprocess |
