@@ -10,7 +10,8 @@ for /f "tokens=1,* delims==" %%A in ('findstr /v "^#" .env') do (
     set "%%A=%%B"
 )
 
-:: 서버 실행
+:: 서버 실행 (PYTHONUTF8=1: 터미널 한국어/특수문자 출력 깨짐 방지)
+set PYTHONUTF8=1
 echo [AI CLI Bot] 서버를 시작합니다...
 python -m ai_cli_relay.app.main
 
