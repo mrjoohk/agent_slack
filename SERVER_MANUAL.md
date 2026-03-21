@@ -170,7 +170,8 @@ python -m ai_cli_relay.app.main
 
 ## 2. CLI별 설치 및 인증
 
-> 사용할 CLI 하나만 설치하면 됩니다. `SELECTED_CLI` 환경변수로 선택합니다.
+> 사용할 CLI를 설치합니다. `skill[name:claude,gemini]` 처럼 **한 요청에서 여러 CLI를 동시에 사용**할 수 있으므로, 쓸 CLI를 모두 설치하세요.
+> Claude만 사용한다면 2-A만 진행해도 됩니다.
 
 ---
 
@@ -315,7 +316,8 @@ Cursor IDE를 열어서 계정 로그인 확인 후 사용하세요.
 
 ```bat
 @echo off
-cd /d C:\Users\user\AI_TOOLS\agent_slack
+:: 이 배치 파일이 있는 폴더로 이동 (클론 위치와 무관하게 동작)
+cd /d "%~dp0"
 
 :: 가상환경 활성화
 call .venv\Scripts\activate
