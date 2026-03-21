@@ -44,6 +44,13 @@ def _log_task_error(task: asyncio.Task) -> None:
 def register_listeners(app: AsyncApp):
     print("[BOOT] register_listeners called", flush=True)
 
+    # 모든 message 이벤트를 잡아서 raw 구조 출력 (패턴 매칭 전 확인용)
+    @app.event("message")
+    async def debug_raw_message(event, body):
+        import json
+        print("[RAW EVENT] message received:", flush=True)
+        print(json.dumps(event, ensure_ascii=False, indent=2), flush=True)
+
     @app.message(SKILL_PATTERN)
     async def handle_skill_request(message, say, context, client: AsyncWebClient):
         print("[1] handle_skill_request entered", flush=True)
