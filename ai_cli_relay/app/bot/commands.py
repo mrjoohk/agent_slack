@@ -155,3 +155,30 @@ def register_listeners(app: AsyncApp):
             )
             task.add_done_callback(_log_task_error)
             print(f"[9] task created: {task.get_name()}", flush=True)
+
+    # SKILL_PATTERN에 매칭되지 않는 메시지를 여기서 받아 사용법 안내.
+    # 반드시 @app.message(SKILL_PATTERN) 뒤에 등록해야 함.
+    # (Bolt는 첫 번째 매칭 리스너만 실행하므로 순서가 중요)
+    @app.event("message")
+    async def handle_unmatched_message(event, client: AsyncWebClient):
+        # bot 자신이 보낸 메시지, subtype 있는 이벤트(edited, deleted 등)는 무시
+        if event.get("subtype") or event.get("bot_id"):
+            return
+        channel = event.get("channel")
+        thread_ts = event.get("ts")
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=(
+                "❓ 명령어 형식이 올바르지 않습니다.\n\n"
+                "*사용법:*\n"
+                "```\n"
+                "skill[스킬명:CLI명] 요청 내용\n"
+                "```\n"
+                "*예시:*\n"
+                "• `skill[core:claude] 피보나치 수열 구현해줘`\n"
+                "• `skill[core:gemini] 이 코드 리뷰해줘`\n"
+                "• `skill[core:claude,gemini] 두 관점에서 비교해줘`\n"
+                "• `skill[core:all] 전부 실행해봐`"
+            ),
+        )
