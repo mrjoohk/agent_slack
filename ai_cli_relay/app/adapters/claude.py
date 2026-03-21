@@ -19,16 +19,22 @@ class ClaudeCLIAdapter(BaseCLIAdapter):
         # --dangerously-skip-permissions: 서버 무인 실행 시 권한 확인 프롬프트 생략
         #   (개인 서버에서 자동 실행 목적으로만 사용할 것)
         cmd = ["claude", "--print", "--dangerously-skip-permissions", spec.prompt]
-        
+
         # 워크스페이스 경로 확인 (없으면 홈 디렉토리로 폴백 - Windows/Linux 모두 안전)
         cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
+
+        # CLAUDECODE 환경변수 제거: Claude Code는 중첩 세션을 차단함.
+        # 서버가 Claude Code(VSCode 확장 등) 안에서 실행될 때 이 변수가 설정되어 있으면
+        # 서브프로세스로 claude CLI를 실행할 수 없으므로 제거 후 전달.
+        child_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        child_env.update(spec.env_vars)
 
         self.process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,  # stderr를 stdout으로 병합
             cwd=cwd,
-            env={**os.environ, **spec.env_vars}
+            env=child_env,
         )
         
         return str(self.process.pid)
