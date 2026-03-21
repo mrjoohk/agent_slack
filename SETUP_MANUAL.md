@@ -194,8 +194,10 @@ description: 범용 개발 작업
 
 ```env
 # ────────────────────────────────────────
-# Slack 토큰 (PART 2에서 발급 후 붙여넣기)
+# Slack 토큰 (아래 PART 2를 진행한 뒤 붙여넣기)
 # ────────────────────────────────────────
+# SLACK_BOT_TOKEN  : PART 2 Step 14에서 발급 (xoxb-... 로 시작)
+# SLACK_APP_TOKEN  : PART 2 Step 12에서 발급 (xapp-1-... 로 시작)
 SLACK_BOT_TOKEN=xoxb-여기에-봇토큰-붙여넣기
 SLACK_APP_TOKEN=xapp-1-여기에-앱레벨토큰-붙여넣기
 
@@ -281,21 +283,39 @@ pause
 
 ---
 
-### Step 12. Socket Mode 활성화 ★ 반드시 먼저
+### Step 12. SLACK_APP_TOKEN 발급 — Socket Mode 활성화
 
-1. 왼쪽 메뉴에서 **Settings** 섹션 → **Socket Mode** 클릭
-2. **Enable Socket Mode** 오른쪽 토글 클릭 → **ON** (초록색)
-3. 팝업이 뜨면:
-   - Token Name: `socket-token` 입력
-   - **Generate** 클릭
-4. `xapp-1-...` 로 시작하는 토큰이 생성됩니다
-5. **Copy** 버튼 클릭 → `.env` 파일의 `SLACK_APP_TOKEN=` 뒤에 붙여넣기
+> 이 토큰(`xapp-1-...`)은 서버가 **Slack 서버에 WebSocket으로 연결**할 때 사용합니다.
+> 포트포워딩 없이 동작하는 핵심 토큰입니다.
+
+1. 왼쪽 메뉴에서 **Settings** 섹션(아래쪽) → **Socket Mode** 클릭
+2. 화면 오른쪽의 **Enable Socket Mode** 토글 클릭 → 초록색 **ON** 상태로 변경
 
    ```
-   SLACK_APP_TOKEN=xapp-1-A1B2C3D4E5F6-...
+   Enable Socket Mode  [  ●  ]  ← 이렇게 ON이 되면 됩니다
    ```
 
-> ⚠️ 이 토큰은 다시 볼 수 없습니다. 지금 바로 `.env`에 붙여넣으세요.
+3. 팝업 창 **"Generate an app-level token..."** 이 뜨면:
+   - **Token Name** 칸에 `socket-token` 입력 (이름은 자유)
+   - 아래 **Generate** 버튼 클릭
+
+4. 토큰이 생성됩니다. 아래처럼 `xapp-1-` 로 시작하는 긴 문자열입니다:
+
+   ```
+   xapp-1-[워크스페이스ID]-[숫자]-[해시값]
+   ```
+
+5. 토큰 오른쪽의 **Copy** 클릭
+6. `.env` 파일을 메모장으로 열어 붙여넣기:
+
+   ```env
+   SLACK_APP_TOKEN=여기에-xapp-1-로-시작하는-토큰-붙여넣기
+   ```
+
+7. **Done** 클릭 → 팝업 닫기
+
+> ⚠️ **지금 바로 `.env`에 붙여넣으세요.** 이 화면을 닫으면 토큰 전체를 다시 볼 수 없습니다.
+> (나중에 재발급하려면: 왼쪽 메뉴 **Basic Information** → **App-Level Tokens** 섹션에서 기존 토큰 삭제 후 재생성)
 
 ---
 
@@ -317,17 +337,33 @@ pause
 
 ---
 
-### Step 14. 앱 설치 및 Bot Token 발급
+### Step 14. SLACK_BOT_TOKEN 발급 — 앱 설치
+
+> 이 토큰(`xoxb-...`)은 봇이 **Slack 채널에 메시지를 보내고 읽을 때** 사용합니다.
 
 1. **OAuth & Permissions** 페이지 맨 위로 스크롤
 2. **Install to Workspace** 버튼 클릭
-3. **허용** 클릭
-4. 페이지가 새로고침되면 **Bot User OAuth Token** (`xoxb-...`) 이 보입니다
-5. **Copy** 클릭 → `.env` 파일의 `SLACK_BOT_TOKEN=` 뒤에 붙여넣기
+
+   > 버튼이 보이지 않으면 페이지를 새로고침합니다.
+
+3. Slack 권한 요청 화면이 나타나면 **허용** 클릭
+4. 페이지가 새로고침되며 상단에 토큰이 표시됩니다:
 
    ```
-   SLACK_BOT_TOKEN=xoxb-1234567890-abcdefghijk-...
+   Bot User OAuth Token
+   xoxb-[숫자]-[숫자]-[해시값]    ← xoxb- 로 시작하는 긴 문자열
+   [Copy]
    ```
+
+5. **Copy** 클릭
+6. `.env` 파일을 메모장으로 열어 붙여넣기:
+
+   ```env
+   SLACK_BOT_TOKEN=여기에-xoxb-로-시작하는-토큰-붙여넣기
+   ```
+
+> ℹ️ 이 토큰은 **OAuth & Permissions** 페이지에서 언제든지 다시 볼 수 있습니다.
+> 유출된 경우 같은 페이지의 **Revoke Token** 으로 무효화하고 재발급합니다.
 
 ---
 
