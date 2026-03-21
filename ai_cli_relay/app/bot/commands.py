@@ -6,7 +6,6 @@ from slack_bolt.async_app import AsyncApp
 from slack_sdk.web.async_client import AsyncWebClient
 from ..worker.tasks import run_langgraph_pipeline
 
-# 메시지 파싱 패턴: skill[스킬명] 또는 skill[스킬명:CLI] 프롬프트
 # 채널에서 봇 멘션(@bot) 후 명령어를 입력하면 텍스트 앞에 <@USER_ID> 가 붙으므로
 # 선택적으로 허용 (DM이나 멘션 없는 채널 메시지도 모두 처리)
 SKILL_PATTERN = re.compile(
@@ -36,7 +35,6 @@ def _parse_skill_spec(raw: str) -> tuple[str, list[str] | None]:
 
 
 def _log_task_error(task: asyncio.Task) -> None:
-    """asyncio.create_task() 예외를 콘솔에 출력 (기본적으로 무시되므로 명시적 핸들러 필요)"""
     if task.cancelled():
         print(f"[TASK] cancelled: {task.get_name()}", flush=True)
     elif task.exception():
@@ -49,12 +47,9 @@ def _log_task_error(task: asyncio.Task) -> None:
 def register_listeners(app: AsyncApp):
     print("[BOOT] register_listeners called", flush=True)
 
-    # 모든 message 이벤트를 잡아서 raw 구조 출력 (패턴 매칭 전 확인용)
-    @app.event("message")
-    async def debug_raw_message(event, body):
-        import json
-        print("[RAW EVENT] message received:", flush=True)
-        print(json.dumps(event, ensure_ascii=False, indent=2), flush=True)
+    # NOTE: @app.event("message") 는 등록하지 않음.
+    # Bolt는 첫 번째 매칭 리스너만 실행하므로, 여기 등록하면
+    # @app.message(SKILL_PATTERN) 이 절대 실행되지 않음.
 
     @app.message(SKILL_PATTERN)
     async def handle_skill_request(message, say, context, client: AsyncWebClient):
@@ -122,7 +117,7 @@ def register_listeners(app: AsyncApp):
                     f"🚀 *[{skill_name}]* "
                     f"`{', '.join(cli_targets)}` "
                     f"{len(cli_targets)}개 CLI에 요청을 분배합니다.\n"
-                    f"> {prompt_text[:80]}"
+                    f"> {prompt_text}"
                 )
             )
 
@@ -130,13 +125,14 @@ def register_listeners(app: AsyncApp):
             job_id = str(uuid.uuid4())
             print(f"[7] posting ack for job={job_id[:8]} cli={cli_name}", flush=True)
             try:
+                # 수신 확인 + 사용자 요청 프롬프트 전체 표시
                 ack = await client.chat_postMessage(
                     channel=channel,
                     thread_ts=thread_ts,
                     text=(
-                        f"⏳ *[{skill_name} | {cli_name.upper()}]* "
-                        f"작업 시작... (Job: `{job_id[:8]}`)\n"
-                        f"> {prompt_text[:80]}"
+                        f"⏳ *[{skill_name} | {cli_name.upper()}]* 작업 시작 "
+                        f"(Job: `{job_id[:8]}`)\n"
+                        f"```\n{prompt_text}\n```"
                     )
                 )
                 print(f"[8] ack posted ts={ack['ts']}", flush=True)
