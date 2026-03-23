@@ -25,11 +25,12 @@ class CursorCLIAdapter(BaseCLIAdapter):
 
     async def submit(self, spec: JobSpec) -> str:
         # CURSOR_AGENT_BIN: 바이너리 경로를 환경변수로 재정의 가능 (기본: "cursor")
-        binary = os.environ.get("CURSOR_AGENT_BIN", "cursor")
+        # CURSOR_AGENT_BIN: 바이너리 경로를 환경변수로 재정의 가능 (기본: "agent.cmd")
+        # Windows: cursor agent CLI는 별도 agent.cmd 바이너리로 제공됨
+        binary = os.environ.get("CURSOR_AGENT_BIN", "agent.cmd")
 
         # --no-confirm : 파일 변경·명령 실행 시 확인 프롬프트 생략 (서버 무인 실행 필수)
-        # Cursor 버전에 따라 플래그가 다를 수 있음 — 동작 확인 후 조정 필요
-        cmd = [binary, "agent", "--no-confirm", spec.prompt]
+        cmd = ["cmd", "/c", binary, "--no-confirm", spec.prompt]
         cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
 
         self.process = await asyncio.create_subprocess_exec(

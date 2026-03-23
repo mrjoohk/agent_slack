@@ -20,7 +20,8 @@ class CodexCLIAdapter(BaseCLIAdapter):
     async def submit(self, spec: JobSpec) -> str:
         # --approval-mode full-auto : 모든 파일 변경·명령 실행을 자동 승인 (서버 무인 실행 필수)
         # OPENAI_API_KEY 환경변수가 없으면 즉시 오류로 종료됨
-        cmd = ["codex", "--approval-mode", "full-auto", spec.prompt]
+        # Windows: npm 설치 CLI는 .cmd 래퍼이므로 cmd /c 를 통해 실행
+        cmd = ["cmd", "/c", "codex", "--approval-mode", "full-auto", spec.prompt]
         cwd = spec.workspace_path if os.path.exists(spec.workspace_path) else str(Path.home())
 
         self.process = await asyncio.create_subprocess_exec(
