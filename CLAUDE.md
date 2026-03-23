@@ -22,11 +22,11 @@ All agents working in this repo must follow the rules below.
 
 ```
 Slack message (phone / desktop)
-  skill[core:claude,gemini] do something
+  agent[claude,gemini] skill[core] do something
   → Slack cloud servers
     → WebSocket (outbound from PC — no port forwarding needed)
       → main.py  AsyncSocketModeHandler
-        → commands.py  (_parse_skill_spec → skill_name + cli_targets list)
+        → commands.py  (_parse_cli_targets → cli_targets list, skill_name)
           → asyncio.create_task()  ×N  (one per CLI, run in parallel)
             → tasks.py  (SkillLoader → CLI Adapter → SlackThrottler)
               → subprocess  (claude / gemini / codex / cursor)
@@ -37,10 +37,10 @@ Slack message (phone / desktop)
 
 | 입력 | 동작 |
 |------|------|
-| `skill[core] prompt` | DEFAULT_CLI 단일 실행 |
-| `skill[core:claude] prompt` | Claude 단일 실행 |
-| `skill[core:claude,gemini] prompt` | Claude + Gemini 병렬 실행 |
-| `skill[core:all] prompt` | 전체 4개 CLI 병렬 실행 |
+| `agent[claude] skill[core] prompt` | Claude 단일 실행 + core 스킬 |
+| `agent[claude,gemini] skill[core] prompt` | Claude + Gemini 병렬 실행 |
+| `agent[all] skill[core] prompt` | 전체 4개 CLI 병렬 실행 |
+| `agent[claude] prompt` | 스킬 없이 Claude 직접 실행 |
 
 **Key design decisions already made — do not revert without justification:**
 

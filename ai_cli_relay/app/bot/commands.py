@@ -6,10 +6,18 @@ from slack_bolt.async_app import AsyncApp
 from slack_sdk.web.async_client import AsyncWebClient
 from ..worker.tasks import run_langgraph_pipeline
 
-# 채널에서 봇 멘션(@bot) 후 명령어를 입력하면 텍스트 앞에 <@USER_ID> 가 붙으므로
-# 선택적으로 허용 (DM이나 멘션 없는 채널 메시지도 모두 처리)
-SKILL_PATTERN = re.compile(
-    r"^(?:<@[A-Z0-9]+>\s*)?skill\s*\[(.*?)\]\s*(.*)$",
+# 새 문법: agent[cli_spec] skill[name](선택) 요청
+# 예시:
+#   agent[claude] skill[core] 피보나치 구현해줘
+#   agent[claude,gemini] skill[core] 비교해줘
+#   agent[all] skill[core] 전부 실행해봐
+#   agent[claude] 스킬 없이 바로 실행
+#   @봇멘션 agent[claude] skill[core] 요청
+AGENT_SKILL_PATTERN = re.compile(
+    r"^(?:<@[A-Z0-9]+>\s*)?"           # 선택적 @멘션
+    r"agent\s*\[([^\]]+)\]"            # agent[cli_spec] — 필수
+    r"(?:\s+skill\s*\[([^\]]+)\])?"    # skill[name]     — 선택
+    r"\s*(.*)?$",                       # 요청 프롬프트
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -20,18 +28,16 @@ VALID_SKILL_NAME = re.compile(r'^[a-zA-Z0-9_-]+$')
 VALID_CLI_NAMES = {"claude", "gemini", "codex", "cursor"}
 
 
-def _parse_skill_spec(raw: str) -> tuple[str, list[str] | None]:
-    if ':' in raw:
-        skill_name, cli_raw = raw.split(':', 1)
-        cli_raw = cli_raw.strip().lower()
-        if cli_raw == 'all':
-            cli_targets = sorted(VALID_CLI_NAMES)
-        else:
-            cli_targets = [c.strip() for c in cli_raw.split(',') if c.strip()]
-    else:
-        skill_name = raw
-        cli_targets = None
-    return skill_name.strip(), cli_targets
+def _parse_cli_targets(cli_raw: str) -> list[str]:
+    """
+    'claude'        → ['claude']
+    'claude,gemini' → ['claude', 'gemini']
+    'all'           → sorted(VALID_CLI_NAMES)
+    """
+    cli_raw = cli_raw.strip().lower()
+    if cli_raw == 'all':
+        return sorted(VALID_CLI_NAMES)
+    return [c.strip() for c in cli_raw.split(',') if c.strip()]
 
 
 def _log_task_error(task: asyncio.Task) -> None:
@@ -47,57 +53,52 @@ def _log_task_error(task: asyncio.Task) -> None:
 def register_listeners(app: AsyncApp):
     print("[BOOT] register_listeners called", flush=True)
 
-    # NOTE: @app.event("message") 는 등록하지 않음.
-    # Bolt는 첫 번째 매칭 리스너만 실행하므로, 여기 등록하면
-    # @app.message(SKILL_PATTERN) 이 절대 실행되지 않음.
-
-    @app.message(SKILL_PATTERN)
-    async def handle_skill_request(message, say, context, client: AsyncWebClient):
-        print("[1] handle_skill_request entered", flush=True)
+    @app.message(AGENT_SKILL_PATTERN)
+    async def handle_agent_request(message, say, context, client: AsyncWebClient):
+        print("[1] handle_agent_request entered", flush=True)
 
         matches = context.get("matches")
         print(f"[2] matches={matches}", flush=True)
-        if not matches or len(matches) < 2:
+        if not matches or len(matches) < 3:
             print("[2] matches missing — return", flush=True)
             return
 
-        raw_spec    = matches[0].strip()
-        prompt_text = matches[1].strip()
+        cli_raw     = (matches[0] or "").strip()
+        skill_name  = (matches[1] or "").strip() or None   # None이면 스킬 없이 실행
+        prompt_text = (matches[2] or "").strip()
         thread_ts   = message.get("ts")
         channel     = message.get("channel")
-        print(f"[3] raw_spec={raw_spec!r} prompt={prompt_text[:40]!r} "
-              f"channel={channel} ts={thread_ts}", flush=True)
 
-        skill_name, cli_targets = _parse_skill_spec(raw_spec)
-        print(f"[4] skill_name={skill_name!r} cli_targets={cli_targets}", flush=True)
+        print(f"[3] cli_raw={cli_raw!r} skill={skill_name!r} "
+              f"prompt={prompt_text[:40]!r}", flush=True)
 
-        # 스킬명 검증
-        if not VALID_SKILL_NAME.match(skill_name):
-            print(f"[4] invalid skill name: {skill_name!r}", flush=True)
+        # 프롬프트 필수
+        if not prompt_text:
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text="❌ 요청 내용을 입력해주세요.\n예: `agent[claude] skill[core] 작업 내용`"
+            )
+            return
+
+        # 스킬명 검증 (지정된 경우만)
+        if skill_name and not VALID_SKILL_NAME.match(skill_name):
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
                 text="❌ 유효하지 않은 스킬명입니다. 영문자, 숫자, `-`, `_`만 허용됩니다."
             )
             return
 
-        if not prompt_text:
-            print("[4] empty prompt — return", flush=True)
+        # CLI 파싱 및 검증
+        cli_targets = _parse_cli_targets(cli_raw)
+        if not cli_targets:
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
-                text="❌ 프롬프트를 입력해주세요.\n예: `skill[core:claude] 작업 내용`"
+                text="❌ CLI를 지정해주세요.\n예: `agent[claude]` 또는 `agent[claude,gemini]`"
             )
             return
 
-        # CLI 기본값
-        if cli_targets is None:
-            default = os.environ.get("DEFAULT_CLI") or os.environ.get("SELECTED_CLI", "claude")
-            cli_targets = [default.strip().lower()]
-            print(f"[5] cli_targets defaulted to {cli_targets}", flush=True)
-
-        # CLI 이름 검증
         invalid = [c for c in cli_targets if c not in VALID_CLI_NAMES]
         if invalid:
-            print(f"[5] invalid CLI names: {invalid}", flush=True)
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
                 text=(
@@ -107,15 +108,14 @@ def register_listeners(app: AsyncApp):
             )
             return
 
-        print(f"[6] dispatching to cli_targets={cli_targets}", flush=True)
+        print(f"[4] cli_targets={cli_targets} skill={skill_name!r}", flush=True)
 
-        # 복수 CLI면 분배 요약 메시지
+        # 복수 CLI 분배 요약 메시지
         if len(cli_targets) > 1:
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
                 text=(
-                    f"🚀 *[{skill_name}]* "
-                    f"`{', '.join(cli_targets)}` "
+                    f"🚀 `{', '.join(cli_targets)}` "
                     f"{len(cli_targets)}개 CLI에 요청을 분배합니다.\n"
                     f"> {prompt_text}"
                 )
@@ -123,24 +123,24 @@ def register_listeners(app: AsyncApp):
 
         for cli_name in cli_targets:
             job_id = str(uuid.uuid4())
-            print(f"[7] posting ack for job={job_id[:8]} cli={cli_name}", flush=True)
+            skill_label = f" | skill:{skill_name}" if skill_name else ""
+            print(f"[5] posting ack job={job_id[:8]} cli={cli_name} skill={skill_name!r}",
+                  flush=True)
             try:
-                # 수신 확인 + 사용자 요청 프롬프트 전체 표시
                 ack = await client.chat_postMessage(
                     channel=channel,
                     thread_ts=thread_ts,
                     text=(
-                        f"⏳ *[{skill_name} | {cli_name.upper()}]* 작업 시작 "
+                        f"⏳ *[{cli_name.upper()}{skill_label}]* 작업 시작 "
                         f"(Job: `{job_id[:8]}`)\n"
                         f"```\n{prompt_text}\n```"
                     )
                 )
-                print(f"[8] ack posted ts={ack['ts']}", flush=True)
+                print(f"[6] ack posted ts={ack['ts']}", flush=True)
             except Exception as e:
-                print(f"[8] ack postMessage FAILED: {e}", flush=True)
+                print(f"[6] ack postMessage FAILED: {e}", flush=True)
                 continue
 
-            print(f"[9] creating asyncio task for job={job_id[:8]}", flush=True)
             task = asyncio.create_task(
                 run_langgraph_pipeline(
                     job_id=job_id,
@@ -154,29 +154,25 @@ def register_listeners(app: AsyncApp):
                 name=f"job-{job_id[:8]}-{cli_name}",
             )
             task.add_done_callback(_log_task_error)
-            print(f"[9] task created: {task.get_name()}", flush=True)
+            print(f"[7] task created: {task.get_name()}", flush=True)
 
-    # 봇 자신이 보낸 메시지 이벤트 (chat_postMessage → bot_message 이벤트로 수신)
-    # 처리하지 않으면 "Unhandled request" 경고가 반복 출력됨
+    # 봇 자신이 보낸 메시지 이벤트 — 무시
     @app.event({"type": "message", "subtype": "bot_message"})
     async def handle_bot_message():
-        pass  # 무시
+        pass
 
-    # chat_update 호출 시 발생하는 message_changed 이벤트
+    # chat_update 시 발생하는 message_changed 이벤트 — 무시
     @app.event({"type": "message", "subtype": "message_changed"})
     async def handle_message_changed():
-        pass  # 무시
+        pass
 
-    # message_deleted 이벤트도 동일하게 무시
     @app.event({"type": "message", "subtype": "message_deleted"})
     async def handle_message_deleted():
-        pass  # 무시
+        pass
 
-    # SKILL_PATTERN에 매칭되지 않는 일반 메시지 → 사용법 안내
-    # 반드시 @app.message(SKILL_PATTERN) 뒤에 등록해야 함
+    # 패턴 미매칭 메시지 → 사용법 안내
     @app.event("message")
     async def handle_unmatched_message(event, client: AsyncWebClient):
-        # 혹시 남은 subtype 이벤트나 bot 메시지는 무시
         if event.get("subtype") or event.get("bot_id"):
             return
         channel = event.get("channel")
@@ -188,12 +184,13 @@ def register_listeners(app: AsyncApp):
                 "❓ 명령어 형식이 올바르지 않습니다.\n\n"
                 "*사용법:*\n"
                 "```\n"
-                "skill[스킬명:CLI명] 요청 내용\n"
+                "agent[CLI명] skill[스킬명] 요청 내용\n"
                 "```\n"
                 "*예시:*\n"
-                "• `skill[core:claude] 피보나치 수열 구현해줘`\n"
-                "• `skill[core:gemini] 이 코드 리뷰해줘`\n"
-                "• `skill[core:claude,gemini] 두 관점에서 비교해줘`\n"
-                "• `skill[core:all] 전부 실행해봐`"
+                "• `agent[claude] skill[core] 피보나치 수열 구현해줘`\n"
+                "• `agent[gemini] skill[core] 이 코드 리뷰해줘`\n"
+                "• `agent[claude,gemini] skill[core] 두 관점에서 비교해줘`\n"
+                "• `agent[all] skill[core] 전부 실행해봐`\n"
+                "• `agent[claude] 스킬 없이 바로 질문`"
             ),
         )

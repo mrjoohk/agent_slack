@@ -28,7 +28,7 @@ def _get_adapter(cli_name: str):
 
 async def run_langgraph_pipeline(
     job_id: str,
-    skill_name: str,
+    skill_name: str | None,   # None이면 스킬 없이 prompt_text만 실행
     prompt_text: str,
     slack_thread_ts: str,
     channel: str,
@@ -54,44 +54,46 @@ async def run_langgraph_pipeline(
     print(f"[{job_id[:8]}] SKILL_BASE_PATH={base_dir}", flush=True)
     print(f"[{job_id[:8]}] WORKSPACE_PATH={workspace}", flush=True)
 
-    # 1. Skill 로드
-    print(f"[{job_id[:8]}] step1: loading skill...", flush=True)
-    loader = SkillLoader(base_dir=base_dir)
-    skill_missing = False
-    try:
-        skill_prompt = loader.load_skill_prompt(skill_name)
-        print(f"[{job_id[:8]}] step1: skill loaded ({len(skill_prompt)} chars)", flush=True)
-    except FileNotFoundError as e:
-        print(f"[{job_id[:8]}] step1: skill load FAILED: {e}", flush=True)
+    # 1. Skill 로드 (skill_name이 None이면 스킬 없이 실행)
+    if skill_name:
+        print(f"[{job_id[:8]}] step1: loading skill={skill_name!r}...", flush=True)
+        loader = SkillLoader(base_dir=base_dir)
+        try:
+            skill_prompt = loader.load_skill_prompt(skill_name)
+            print(f"[{job_id[:8]}] step1: skill loaded ({len(skill_prompt)} chars)",
+                  flush=True)
+        except FileNotFoundError as e:
+            print(f"[{job_id[:8]}] step1: skill not found: {e}", flush=True)
+            expected_path = str(Path(base_dir) / skill_name / "SKILL.md")
+            await slack_client.chat_postMessage(
+                channel=channel,
+                thread_ts=slack_thread_ts,
+                text=(
+                    f"⚠️ 스킬 `{skill_name}` 을 찾을 수 없습니다.\n"
+                    f"아래 경로에 SKILL.md 파일을 만들어주세요:\n"
+                    f"```{expected_path}```"
+                ),
+            )
+            print(f"[{job_id[:8]}] PIPELINE END (skill not found)", flush=True)
+            return
+        except Exception as e:
+            print(f"[{job_id[:8]}] step1: skill load error: {e}", flush=True)
+            skill_prompt = ""
+    else:
+        print(f"[{job_id[:8]}] step1: no skill specified — running without system prompt",
+              flush=True)
         skill_prompt = ""
-        skill_missing = True
-    except Exception as e:
-        print(f"[{job_id[:8]}] step1: skill load FAILED: {e}", flush=True)
-        skill_prompt = ""
-
-    if skill_missing:
-        expected_path = f"{base_dir}\\{skill_name}\\SKILL.md"
-        await slack_client.chat_postMessage(
-            channel=channel,
-            thread_ts=slack_thread_ts,
-            text=(
-                f"⚠️ 스킬 `{skill_name}` 을 찾을 수 없습니다.\n"
-                f"아래 경로에 SKILL.md 파일을 만들어주세요:\n"
-                f"```{expected_path}```"
-            ),
-        )
-        print(f"[{job_id[:8]}] PIPELINE END (skill not found)", flush=True)
-        return
 
     # 2. Adapter 선택
     print(f"[{job_id[:8]}] step2: getting adapter for {selected_cli!r}", flush=True)
     adapter = _get_adapter(selected_cli)
     print(f"[{job_id[:8]}] step2: adapter={adapter.__class__.__name__}", flush=True)
 
+    full_prompt = f"{skill_prompt}\n\nTask:\n{prompt_text}" if skill_prompt else prompt_text
     spec = JobSpec(
         job_id=job_id,
-        skill_name=skill_name,
-        prompt=f"{skill_prompt}\n\nTask:\n{prompt_text}",
+        skill_name=skill_name or "",
+        prompt=full_prompt,
         workspace_path=workspace,
     )
 
