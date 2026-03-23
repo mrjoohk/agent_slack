@@ -156,12 +156,27 @@ def register_listeners(app: AsyncApp):
             task.add_done_callback(_log_task_error)
             print(f"[9] task created: {task.get_name()}", flush=True)
 
-    # SKILL_PATTERN에 매칭되지 않는 메시지를 여기서 받아 사용법 안내.
-    # 반드시 @app.message(SKILL_PATTERN) 뒤에 등록해야 함.
-    # (Bolt는 첫 번째 매칭 리스너만 실행하므로 순서가 중요)
+    # 봇 자신이 보낸 메시지 이벤트 (chat_postMessage → bot_message 이벤트로 수신)
+    # 처리하지 않으면 "Unhandled request" 경고가 반복 출력됨
+    @app.event({"type": "message", "subtype": "bot_message"})
+    async def handle_bot_message():
+        pass  # 무시
+
+    # chat_update 호출 시 발생하는 message_changed 이벤트
+    @app.event({"type": "message", "subtype": "message_changed"})
+    async def handle_message_changed():
+        pass  # 무시
+
+    # message_deleted 이벤트도 동일하게 무시
+    @app.event({"type": "message", "subtype": "message_deleted"})
+    async def handle_message_deleted():
+        pass  # 무시
+
+    # SKILL_PATTERN에 매칭되지 않는 일반 메시지 → 사용법 안내
+    # 반드시 @app.message(SKILL_PATTERN) 뒤에 등록해야 함
     @app.event("message")
     async def handle_unmatched_message(event, client: AsyncWebClient):
-        # bot 자신이 보낸 메시지, subtype 있는 이벤트(edited, deleted 등)는 무시
+        # 혹시 남은 subtype 이벤트나 bot 메시지는 무시
         if event.get("subtype") or event.get("bot_id"):
             return
         channel = event.get("channel")

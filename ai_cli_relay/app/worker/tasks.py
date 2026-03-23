@@ -57,12 +57,31 @@ async def run_langgraph_pipeline(
     # 1. Skill 로드
     print(f"[{job_id[:8]}] step1: loading skill...", flush=True)
     loader = SkillLoader(base_dir=base_dir)
+    skill_missing = False
     try:
         skill_prompt = loader.load_skill_prompt(skill_name)
         print(f"[{job_id[:8]}] step1: skill loaded ({len(skill_prompt)} chars)", flush=True)
+    except FileNotFoundError as e:
+        print(f"[{job_id[:8]}] step1: skill load FAILED: {e}", flush=True)
+        skill_prompt = ""
+        skill_missing = True
     except Exception as e:
         print(f"[{job_id[:8]}] step1: skill load FAILED: {e}", flush=True)
-        skill_prompt = "Default Context"
+        skill_prompt = ""
+
+    if skill_missing:
+        expected_path = f"{base_dir}\\{skill_name}\\SKILL.md"
+        await slack_client.chat_postMessage(
+            channel=channel,
+            thread_ts=slack_thread_ts,
+            text=(
+                f"⚠️ 스킬 `{skill_name}` 을 찾을 수 없습니다.\n"
+                f"아래 경로에 SKILL.md 파일을 만들어주세요:\n"
+                f"```{expected_path}```"
+            ),
+        )
+        print(f"[{job_id[:8]}] PIPELINE END (skill not found)", flush=True)
+        return
 
     # 2. Adapter 선택
     print(f"[{job_id[:8]}] step2: getting adapter for {selected_cli!r}", flush=True)
