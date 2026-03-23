@@ -1,6 +1,6 @@
 # AI CLI Relay Orchestrator — 프로젝트 요약
 
-> 작성일: 2026-03-21
+> 작성일: 2026-03-23 (최종 업데이트)
 
 ---
 
@@ -11,7 +11,7 @@ Slack 메시지를 수신해 Windows 11 PC에서 AI CLI(Claude, Gemini, Codex, C
 
 ```
 스마트폰 Slack
-  └─▶ skill[core:claude] 요청
+  └─▶ agent[claude] skill[core] 요청
         │  (Socket Mode WebSocket — 포트포워딩 불필요)
   Windows PC
         │  claude --print --dangerously-skip-permissions "..."
@@ -36,10 +36,15 @@ Slack 메시지를 수신해 Windows 11 PC에서 AI CLI(Claude, Gemini, Codex, C
 
 ### 2-3. 멀티 CLI 병렬 라우팅
 - **문제**: `SELECTED_CLI` 환경변수로 서버 전체 CLI를 고정 → 요청마다 다른 CLI 사용 불가
-- **결정**: `skill[name:cli1,cli2]` 문법으로 요청 단위 CLI 지정
+- **결정**: `agent[cli1,cli2] skill[name]` 문법으로 요청 단위 CLI 지정
 - **효과**: 한 요청에서 Claude + Gemini 동시 실행, 결과 비교 가능
 
-### 2-4. WindowsProactorEventLoopPolicy
+### 2-4. 명령어 문법 분리 (`skill[core:claude]` → `agent[claude] skill[core]`)
+- **문제**: `skill[core:claude]` 형식은 스킬과 CLI가 한 괄호에 혼재 → 가독성 낮고 확장 어려움
+- **결정**: `agent[...]` (CLI 선택)과 `skill[...]` (스킬 선택)을 별도 토큰으로 분리
+- **효과**: 스킬 없이 `agent[claude] 질문`도 자연스럽게 표현 가능, 파싱 로직 단순화
+
+### 2-5. WindowsProactorEventLoopPolicy
 - Windows에서 `asyncio.create_subprocess_exec()` 동작을 위해 필요
 - Python 3.14에서 deprecated → `sys.stdout.reconfigure()` 방식으로 대체
 
@@ -71,9 +76,9 @@ main.py
   AsyncSocketModeHandler.start_async()
     │
     └─ commands.py: register_listeners()
-         @app.message(SKILL_PATTERN)
+         @app.message(AGENT_SKILL_PATTERN)
            ├─ 멘션 포함/미포함 메시지 파싱
-           ├─ skill_name, cli_targets 추출
+           ├─ cli_targets, skill_name 추출
            ├─ ack 메시지 → Slack 스레드 (요청 프롬프트 표시)
            └─ asyncio.create_task(run_langgraph_pipeline × N)
                 │
@@ -110,11 +115,12 @@ main.py
 
 | 입력 | 동작 |
 |------|------|
-| `skill[core] 작업` | DEFAULT_CLI 단일 실행 |
-| `skill[core:claude] 작업` | Claude 단일 실행 |
-| `skill[core:claude,gemini] 작업` | Claude + Gemini 병렬 실행 |
-| `skill[core:all] 작업` | 4개 CLI 전체 병렬 실행 |
-| `@봇이름 skill[core:claude] 작업` | 멘션 포함도 동일하게 처리 |
+| `agent[claude] skill[core] 작업` | Claude 단일 실행 + core 스킬 |
+| `agent[gemini] skill[core] 작업` | Gemini 단일 실행 + core 스킬 |
+| `agent[claude,gemini] skill[core] 작업` | Claude + Gemini 병렬 실행 |
+| `agent[all] skill[core] 작업` | 4개 CLI 전체 병렬 실행 |
+| `agent[claude] 작업` | 스킬 없이 Claude 직접 실행 |
+| `@봇이름 agent[claude] skill[core] 작업` | 채널 멘션 포함도 동일하게 처리 |
 
 ---
 
